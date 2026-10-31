@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Phantom Bots: Lake Patrol — FLL AUV Mussel Simulation</title>
+  <link rel="stylesheet" href="./src/ui/styles.css" />
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+</head>
+<body>
+  <!-- 3D Render Surface -->
+  <div id="canvas-container">
+    <canvas id="game-canvas"></canvas>
+  </div>
+
+  <!-- Edge-AI 2D Vision Bounding Box Overlay -->
+  <canvas id="detection-overlay"></canvas>
+
+  <!-- Tactical HUD Overlay -->
+  <div id="hud">
+    <div class="hud-top-left">
+      <div class="hud-panel">
+        <div class="hud-label">TELEMETRY</div>
+        <div class="hud-val" id="hud-depth">0.0m</div>
+        <div class="hud-label" style="margin-top: 4px;">SPEED: <span id="hud-speed" style="color:#fff;">0.0m/s</span></div>
+      </div>
+
+      <div class="hud-panel">
+        <div class="hud-label">AUV BATTERY</div>
+        <div class="hud-val" id="hud-battery-val">100%</div>
+        <div class="hud-bar-container">
+          <div class="hud-bar" id="hud-battery-bar"></div>
+        </div>
+      </div>
+
+      <div class="hud-panel">
+        <div class="hud-label">HOPPER STORAGE</div>
+        <div class="hud-val" id="hud-hopper-val">0/40</div>
+        <div class="hud-bar-container">
+          <div class="hud-bar" id="hud-hopper-bar" style="background-color: #38bdf8;"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="hud-top-right">
+      <div class="hud-panel" style="text-align: right;">
+        <div class="hud-label">MISSION TIMER</div>
+        <div class="hud-timer" id="hud-timer">02:00</div>
+        <div class="hud-score" id="hud-score">0 PTS</div>
+      </div>
+
+      <div class="hud-panel minimap-panel">
+        <canvas id="minimap-canvas" width="110" height="110"></canvas>
+      </div>
+    </div>
+
+    <div class="hud-crosshair"></div>
+
+    <div class="hud-toast" id="hud-toast"></div>
+
+    <!-- Level 1 Tactical Tutorial Guidance Banner -->
+    <div class="hud-tutorial" id="hud-tutorial" style="display: none;">
+      <div class="tutorial-badge" id="tutorial-badge">TUTORIAL</div>
+      <div class="tutorial-text" id="tutorial-text"></div>
+      <button type="button" class="tutorial-close-btn" id="tutorial-close" aria-label="Dismiss Tutorial">✕</button>
+    </div>
+
+    <div class="hud-center-bottom">
+      <div class="tool-slot active" id="tool-slot-1">
+        <span class="tool-key">1</span>
+        <span>HYDRO-VACUUM</span>
+      </div>
+      <div class="tool-slot" id="tool-slot-2">
+        <span class="tool-key">2</span>
+        <span>CHEMICAL SPRAY</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mobile Touch Overlay -->
+  <div id="touch-overlay">
+    <div class="touch-stick-zone" id="touch-stick-zone">
+      <div class="touch-stick-nub" id="touch-stick-nub"></div>
+    </div>
+
+    <div class="touch-heave-group">
+      <button type="button" class="btn-touch" id="btn-heave-up" aria-label="Heave Up">▲</button>
+      <button type="button" class="btn-touch" id="btn-heave-down" aria-label="Heave Down">▼</button>
+    </div>
+
+    <div class="touch-action-buttons">
+      <button type="button" class="btn-touch" id="btn-touch-cam" aria-label="Toggle Camera">CAM</button>
+      <div style="display: flex; gap: 8px;">
+        <button type="button" class="btn-touch" id="btn-touch-tool-1" aria-label="Tool 1: Vacuum">1</button>
+        <button type="button" class="btn-touch" id="btn-touch-tool-2" aria-label="Tool 2: Spray">2</button>
+      </div>
+      <button type="button" class="btn-touch btn-touch-fire" id="btn-touch-fire" aria-label="Fire Tool">FIRE</button>
+    </div>
+  </div>
+
+  <!-- Title Screen -->
+  <div id="title-screen">
+    <div class="title-card">
+      <div class="fll-badge">FIRST LEGO League 2026 Research</div>
+      <h1>LAKE PATROL</h1>
+      <p>
+        Autonomous Underwater Vehicle (AUV) simulation for invasive Quagga mussel detection & selective bio-removal.
+        Use Edge-AI vision and eDNA tracking to protect native freshwater ecosystems.
+      </p>
+      <div class="title-actions">
+        <button type="button" class="btn-primary" id="btn-play">START MISSION</button>
+        <button type="button" class="btn-secondary" id="btn-how-to-play">PILOT MANUAL</button>
+        <button type="button" class="btn-secondary" id="btn-field-guide">FIELD GUIDE</button>
+        <button type="button" class="btn-secondary" id="btn-level-select">SELECT MISSION</button>
+        <button type="button" class="btn-secondary" id="btn-trifold-qr">TRIFOLD QR</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Dialog: Field Guide -->
+  <dialog id="dialog-field-guide" aria-labelledby="guide-title">
+    <div class="dialog-header">
+      <h2 id="guide-title">Bivalve Field Guide & AI Morphometrics</h2>
+      <button type="button" class="dialog-close-btn" aria-label="Close dialog">✕</button>
+    </div>
+    <div class="guide-grid">
+      <div class="guide-card quagga">
+        <div class="guide-info">
+          <h4 style="color: #22c55e;">Invasive Quagga Mussel (Dreissena bugensis)</h4>
+          <p>
+            Rapidly expanding deep-water biofouler. Displaces zebra mussels, filters out native phytoplankton, and colonizes soft muddy substrates.
+          </p>
+          <div class="guide-traits">
+            AI ID: Asymmetrical fan outline, rounded ventral edge (cannot stand upright), faint pale concentric rings.
+          </div>
+        </div>
+      </div>
+
+      <div class="guide-card zebra">
+        <div class="guide-info">
+          <h4 style="color: #f59e0b;">Established Zebra Mussel (Dreissena polymorpha)</h4>
+          <p>
+            Settled in Wisconsin lakes since the 1990s. Heavy biofouler on hard dock pilings and pipes. Removal yields 0 points (baseline established population) to teach target prioritization.
+          </p>
+          <div class="guide-traits">
+            AI ID: Triangular D-shape, sharp lateral carina ridge, flat ventral side (stands upright on rocks), bold zig-zag stripes.
+          </div>
+        </div>
+      </div>
+
+      <div class="guide-card native">
+        <div class="guide-info">
+          <h4 style="color: #ef4444;">Native Freshwater Unionid (Endangered)</h4>
+          <p>
+            Vital ecological keystone filter-feeders that aerate lakebed sediment. Strictly protected: harming them triggers severe penalties (-300 PTS).
+          </p>
+          <div class="guide-traits">
+            AI ID: Large elongated thick oval (2-3x dreissenid size), dark olive-brown shell, partially buried in sand with siphons exposed.
+          </div>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Modal Dialog: Level Select -->
+  <dialog id="dialog-level-select" aria-labelledby="level-title">
+    <div class="dialog-header">
+      <h2 id="level-title">Select Research Mission</h2>
+      <button type="button" class="dialog-close-btn" aria-label="Close dialog">✕</button>
+    </div>
+    <div class="levels-grid" id="levels-grid"></div>
+  </dialog>
+
+  <!-- Modal Dialog: Pause Screen -->
+  <dialog id="dialog-pause" aria-labelledby="pause-title">
+    <div class="dialog-header">
+      <h2 id="pause-title">AUV Telemetry Paused</h2>
+      <button type="button" class="dialog-close-btn" aria-label="Close dialog">✕</button>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 10px;">
+      <button type="button" class="btn-primary" id="btn-resume">RESUME MISSION</button>
+      <button type="button" class="btn-secondary" id="btn-pause-how-to-play">PILOT MANUAL / CONTROLS</button>
+      <button type="button" class="btn-secondary" id="btn-restart">RESTART MISSION</button>
+      <button type="button" class="btn-danger" id="btn-quit-title">QUIT TO TITLE</button>
+    </div>
+  </dialog>
+
+  <!-- Modal Dialog: Pilot Manual / Instructions -->
+  <dialog id="dialog-how-to-play" aria-labelledby="manual-title">
+    <div class="dialog-header">
+      <h2 id="manual-title">AUV Pilot Manual & Operations</h2>
+      <button type="button" class="dialog-close-btn" aria-label="Close dialog">✕</button>
+    </div>
+    <div class="manual-content">
+      <div class="manual-section">
+        <h3>1. Flight Kinematics & Controls</h3>
+        <p class="manual-desc">Your Autonomous Underwater Vehicle (AUV) operates on 5 active thrust axes with automatic hydrodynamic banking.</p>
+        <div class="controls-grid">
+          <div class="ctrl-card">
+            <h4>Desktop (Keyboard & Mouse)</h4>
+            <table class="ctrl-table">
+              <tr><td><span class="key-badge">W</span> <span class="key-badge">S</span></td><td>Surge Forward / Backward</td></tr>
+              <tr><td><span class="key-badge">A</span> <span class="key-badge">D</span></td><td>Sway Strafe Left / Right</td></tr>
+              <tr><td><span class="key-badge">Space</span> / <span class="key-badge">Shift</span></td><td>Heave Ascend / Descend (or E / Q)</td></tr>
+              <tr><td><span class="key-badge">Mouse Click</span></td><td>Lock Pointer to steer & pitch</td></tr>
+              <tr><td><span class="key-badge">Arrow Keys</span></td><td>Manual Yaw & Pitch rate</td></tr>
+              <tr><td><span class="key-badge">1</span> / <span class="key-badge">2</span></td><td>Equip Vacuum (1) or Sprayer (2)</td></tr>
+              <tr><td><span class="key-badge">Left Click</span> / <span class="key-badge">F</span></td><td>Fire Active Tool</td></tr>
+              <tr><td><span class="key-badge">C</span></td><td>Toggle Chase Cam / Nose Cam</td></tr>
+              <tr><td><span class="key-badge">Esc</span></td><td>Pause Mission</td></tr>
+            </table>
+          </div>
+          <div class="ctrl-card">
+            <h4>Mobile / Touch (iPad / Phone)</h4>
+            <table class="ctrl-table">
+              <tr><td><span class="key-badge">Left Stick</span></td><td>Touch & drag virtual joystick for surge/sway</td></tr>
+              <tr><td><span class="key-badge">Right Half</span></td><td>Drag screen to steer and aim headlights</td></tr>
+              <tr><td><span class="key-badge">▲</span> <span class="key-badge">▼</span></td><td>Heave depth buttons (up / down)</td></tr>
+              <tr><td><span class="key-badge">1</span> <span class="key-badge">2</span></td><td>Tool selection buttons</td></tr>
+              <tr><td><span class="key-badge">FIRE</span></td><td>Hold red trigger button to fire</td></tr>
+              <tr><td><span class="key-badge">CAM</span></td><td>Toggle camera viewpoint</td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="manual-section">
+        <h3>2. Multi-Modal Target Detection</h3>
+        <ul class="manual-list">
+          <li><strong>eDNA Sonar Heatmap (Macro-tracking):</strong> The top-right minimap displays microscopic veliger larvae concentration (Blue → Yellow → Red plume). Audio sonar ping frequency accelerates as you approach live Quagga colonies!</li>
+          <li><strong>Edge-AI Vision Reticles (Micro-targeting):</strong> On-device computer vision classifies bivalves in real-time with confidence metrics:
+            <div style="display:flex; flex-direction:column; gap:6px; margin-top:6px;">
+              <span style="color:#22c55e;"><strong>[ ] QUAGGA (Green):</strong> Target invasive! Collect for <strong>+100 PTS</strong>.</span>
+              <span style="color:#f59e0b;"><strong>- - ZEBRA (Amber):</strong> Established Wisconsin baseline population (0 PTS).</span>
+              <span style="color:#ef4444;"><strong>[X] NATIVE UNIONID (Red):</strong> Strictly endangered! Direct harm penalty: <strong>-300 PTS</strong>.</span>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="manual-section">
+        <h3>3. Eradication Tools & Energy Loop</h3>
+        <ul class="manual-list">
+          <li><strong>Tool 1: Hydro-Vacuum:</strong> Concentrated suction cone (3.6m). Consumes 3.2% battery/s. Physical removal into onboard hopper—zero chemical runoff.</li>
+          <li><strong>Tool 2: Chemical Micro-Sprayer:</strong> Targeted bio-pesticide cloud (3m radius). Kills clusters quickly, but lingering toxic cloud harms nearby native Unionids (-300 PTS) and fish (-150 PTS). Restricted in Sanctuary reefs!</li>
+          <li><strong>Hopper Capacity (40 Mussels):</strong> When full (40/40), vacuum stops. Return to the glowing cyan <strong>DOCK STATION</strong> to empty your hopper and recharge battery.</li>
+          <li><strong>Docking Station:</strong> Stand within the glowing ring to fast-recharge (9%/s) and bank all quaggas. <em>Note: Unbanked quaggas held in hopper at mission end count at only 50% value!</em></li>
+        </ul>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Modal Dialog: FLL Judge Debrief -->
+  <dialog id="dialog-debrief" aria-labelledby="debrief-title">
+    <div class="debrief-header">
+      <div class="fll-badge">FLL Mission Debrief</div>
+      <h2 id="debrief-title">ECOLOGICAL OUTCOME SCORECARD</h2>
+      <div class="debrief-new-best" id="debrief-new-best" style="display: none;">★ NEW HIGH SCORE! ★</div>
+      <div class="debrief-stars" id="debrief-stars">★★★</div>
+      <div class="debrief-score-hero" id="debrief-score">0 PTS</div>
+      <div class="debrief-prev-best" id="debrief-prev-best" style="display: none;"></div>
+    </div>
+
+    <div class="debrief-stats-grid">
+      <div class="stat-item">
+        <div class="stat-title">Quagga Interception Rate</div>
+        <div class="stat-val" id="debrief-intercept">0%</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-title">Native Unionid Survival</div>
+        <div class="stat-val" id="debrief-native-surv">100%</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-title">Native Fish Survival</div>
+        <div class="stat-val" id="debrief-fish-surv">100%</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-title">Battery Utilized</div>
+        <div class="stat-val" id="debrief-battery">0%</div>
+      </div>
+      <div class="stat-item" style="grid-column: span 2;">
+        <div class="stat-title">AUV Eco-Efficiency Rating</div>
+        <div class="stat-val" id="debrief-efficiency">0.0 pts/%</div>
+      </div>
+    </div>
+
+    <h3 style="font-size: 13px; color: var(--cyan-bright); margin-bottom: 8px; text-transform: uppercase;">Team Research Takeaways</h3>
+    <ul class="debrief-takeaways" id="debrief-takeaways"></ul>
+
+    <div class="debrief-actions">
+      <button type="button" class="btn-secondary" id="btn-debrief-replay">RETRY MISSION</button>
+      <button type="button" class="btn-secondary" id="btn-debrief-qr">TRIFOLD QR</button>
+      <button type="button" class="btn-primary" id="btn-debrief-next">NEXT MISSION</button>
+    </div>
+  </dialog>
+
+  <!-- Modal Dialog: FLL Trifold QR Code & Presentation Share -->
+  <dialog id="dialog-trifold-qr" aria-labelledby="qr-title">
+    <div class="dialog-header">
+      <h2 id="qr-title">FLL Trifold Presentation QR Card</h2>
+      <button type="button" class="dialog-close-btn" aria-label="Close dialog">✕</button>
+    </div>
+    <div class="qr-container">
+      <div class="qr-card" id="qr-printable-card">
+        <div class="fll-badge">FIRST LEGO League 2026 Research</div>
+        <h3 class="qr-project-title">PHANTOM BOTS: LAKE PATROL</h3>
+        <p class="qr-project-sub">Autonomous Underwater Vehicle (AUV) for Invasive Quagga Mussel Management</p>
+        <div class="qr-code-wrapper" id="qr-svg-wrapper"></div>
+        <div class="qr-url-text" id="qr-url-text">https://phantom-bots.github.io/Lake-Patrol/</div>
+        <div class="qr-scan-hint">Scan with camera or iPad to pilot the research AUV simulation live!</div>
+      </div>
+
+      <div class="qr-controls">
+        <label for="qr-url-input" class="hud-label">Customize Simulation URL:</label>
+        <div style="display: flex; gap: 8px; width: 100%; margin-top: 4px;">
+          <input type="text" id="qr-url-input" class="qr-input" value="https://phantom-bots.github.io/Lake-Patrol/" />
+          <button type="button" class="btn-secondary" id="btn-qr-update">UPDATE</button>
+        </div>
+        <div style="display: flex; gap: 10px; margin-top: 12px; justify-content: flex-end;">
+          <button type="button" class="btn-primary" id="btn-qr-print">PRINT TRIFOLD CARD</button>
+          <button type="button" class="btn-secondary" id="btn-qr-copy">COPY LINK</button>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Entry Script -->
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
